@@ -1,0 +1,110 @@
+redirectfixup is a Python utility designed to clean up and canonicalize HTML files by resolving 301 Moved Permanently redirects and flattening absolute URLs into local relative paths. 
+
+It was designed for archiving a set of legacy sites from an esoteric CMS to a set of flat files. Some of the content from these sites had been split up over a multitude of subdomains for reasons relating to serving architecture and administrator
+convenience, and at archive time we wanted to unwind this where possible. Our rough process for archiving these sites was to use curl to scrape many pages down to a set of files, use apache mod_rewrite rules to make the static pages
+work, and then use this tool to replace the redirects and canonicalize all links/references to be site-local.
+
+Core Features
+
+  Automatic 301 Resolution: Performs network HEAD requests to find where links have moved and updates the HTML to point to the new destination.
+
+  URL Canonicalization: Converts absolute URLs (e.g., http://dev.oursite.org/path/) into clean, relative paths (e.g., /path/).
+
+  Cross-domain management: configuration can express that many domains should be regarded as equivalent (e.g. for ServerAlias) and can even
+  support some domains which should only-sometimes be rewritten as local (i.e. 301 redirects -> rewrite the HTML, 302 redirects -> leave HTML alone)
+
+  Dry Run Support: Test your changes on single files before performing a bulk update on an entire directory.
+
+Installation
+
+Ensure you have Python 3.8+ installed. The script relies on requests and beautifulsoup4.
+
+```
+pip install requests beautiful
+```
+
+Configuration (sites.json)
+
+The behavior of the script is driven by a sites.json file. This file defines the target directories and the logic for how different domains are handled.
+
+Configuration Keys
+
+Key	Description
+target_directory	The local folder containing the .html files you want to process.
+default_base_domain	The "virtual" root URL used to resolve relative paths in your HTML.
+site_config	The Lookup Layer. Maps various hostnames to a "lookup base." If a hostname is found here, the script will perform network requests against this base to check for redirects.
+perma_site_config	The Rewrite Layer. Determines which hostnames should be converted into local relative paths. If not specified, site_config is reused for this.
+
+The "Mirror" Logic (Advanced)
+
+The distinction between site_config and perma_site_config allows for a very specific cleanup workflow:
+
+ Scenario: You have a primary site (primary.example.org) and a mirror site (maybemirror.example.org). The mirror site mirrors your content, perhaps under maybemirror.example.org/site/primary/ but the mirror site may also be mirroring links from other sites.
+ Goal: You want to turn all links to the mirror that truly reference primary into local links, but leave mirror links to other sites (e.g. maybemirror.example.org/site/foreign/) alone.
+ Setup:
+  Add the mirror hostname to site_config but exclude it from perma_site_config. Point the mirror hostname at a webserver you control.
+  Configure your webserver so any request to your content (e.g. maybemirror.example.org/site/primary/.*) is 301 redirected, but other paths to the mirror site just return 302 found.
+  Result: When the script runs, it sees the link to the mirror, follows the 301 to the main site, realizes the new destination is in perma_site_config, and rewrites the link to a local relative path. Any links that return a 302 or don't redirect are left as absolute mirror links.
+
+
+Usage
+
+Basic Command
+
+To process all HTML files for a defined site in sites.json:
+
+```
+python redirectixup.py oursite
+```
+
+Single File Testing (Dry Run)
+
+Before running a bulk update, test how a single file will be transformed:
+```
+python redirectixup.py oursite path/to/test.html
+```
+
+Advanced Options
+
+Argument	Description
+site (positional)	The key name within sites.json to use for configuration.
+--regex <pattern>	Only process files whose local path matches this regex.
+--exempt <pattern>	Use a regex to skip normalization for specific local link patterns.
+--check-redirects	(Default: True) Whether to perform network requests to follow 301 redirects. If false, only rewriting of local URLs (from perma_site_config) to relative URLs will happen.
+single_file (optional)	A specific file path to process in isolation.
+
+Example Commands
+
+Filter processing to only a specific subfolder:
+
+```
+python redirectixup.py oursite --regex "archives/2023/"
+```
+
+Disable redirect checking (only perform path cleaning):
+
+```
+python redirectixup.py oursite --no-check-redirects
+```
+
+
+Example sites.json Structure
+```
+{
+  "sites": {
+    "oursite": {
+      "target_directory": "./oursite",
+      "default_base_domain": "http://dev.oursite.example.org",
+      "site_config": {
+        "oursite.example.org": "http://dev.oursite.example.org",
+        "oursite.example.com": "http://dev.oursite.example.org",
+        "maybemirror.oursite.example.org": "http://mirrordev.oursite.example.org"
+      },
+      "perma_site_config": {
+        "oursite.example.org": "http://dev.oursite.example.org",
+        "oursite.example.com": "http://dev.oursite.example.org"
+      }
+    }
+  }
+}
+```
