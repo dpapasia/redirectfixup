@@ -1,0 +1,18 @@
+{
+  "sites": {
+    "oursite": {
+      "target_directory": "./oursite",
+      "default_base_domain": "http://dev.oursite.example.org",
+      "site_config": {
+        "oursite.example.org": "http://dev.oursite.example.org",
+        "oursite.example.com": "http://dev.oursite.example.org",
+        "maybemirror.oursite.example.org": "http://mirrordev.oursite.example.org"
+       },
+      "perma_site_config": {
+        "oursite.example.org": "http://dev.oursite.example.org",
+        "oursite.example.com": "http://dev.oursite.example.org"
+       }
+    }
+  }
+}
+
